@@ -1,1 +1,184 @@
+import React, { useState } from 'react';
+import { base44 } from '@/api/base44Client';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Card, CardContent } from '@/components/ui/card';
+import { Upload, Loader2, CheckCircle2 } from 'lucide-react';
+import { toast } from 'sonner';
 
+const CATEGORIES = ["Electronics", "Documents", "Accessories", "Clothing", "Books", "Keys", "Bags", "Sports Equipment", "Other"];
+
+export default function ReportLostItem() {
+  const [formData, setFormData] = useState({
+    item_name: '',
+    category: '',
+    place_lost: '',
+    date_lost: '',
+    description: '',
+    image_url: ''
+  });
+  const [uploading, setUploading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+
+  const handleImageUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploading(true);
+    try {
+      const { file_url } = await base44.integrations.Core.UploadFile({ file });
+      setFormData({ ...formData, image_url: file_url });
+      toast.success('Image uploaded successfully');
+    } catch (error) {
+      toast.error('Failed to upload image');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setSubmitting(true);
+
+    try {
+      const user = await base44.auth.me();
+      await base44.entities.LostItem.create(formData);
+
+      await base44.entities.Notification.create({
+        user_id: user.id,
+        type: 'item_update',
+        title: 'Lost Item Reported',
+        message: 'Your lost item report has been submitted for admin approval.'
+      });
+
+      setSubmitted(true);
+      toast.success('Lost item reported successfully! Awaiting admin approval.');
+      
+      setTimeout(() => {
+        setFormData({
+          item_name: '',
+          category: '',
+          place_lost: '',
+          date_lost: '',
+          description: '',
+          image_url: ''
+        });
+        setSubmitted(false);
+      }, 3000);
+    } catch (error) {
+      toast.error('Failed to report lost item');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (submitted) {
+    return (
+      <Card className="border-2 border-green-200 bg-green-50">
+        <CardContent className="flex flex-col items-center justify-center py-12">
+          <CheckCircle2 className="w-16 h-16 text-green-600 mb-4" />
+          <h3 className="text-xl font-semibold text-green-900 mb-2">Report Submitted!</h3>
+          <p className="text-green-700 text-center">Your lost item report is pending admin approval.</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="space-y-2">
+          <Label htmlFor="item_name">Item Name *</Label>
+          <Input
+            id="item_name"
+            placeholder="e.g., Black Wallet"
+            value={formData.item_name}
+            onChange={(e) => setFormData({ ...formData, item_name: e.target.value })}
+            required
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="category">Category *</Label>
+          <Select value={formData.category} onValueChange={(value) => setFormData({ ...formData, category: value })}>
+            <SelectTrigger>
+              <SelectValue placeholder="Select category" />
+            </SelectTrigger>
+            <SelectContent>
+              {CATEGORIES.map(cat => (
+                <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="place_lost">Place Lost *</Label>
+          <Input
+            id="place_lost"
+            placeholder="e.g., Library, Block A"
+            value={formData.place_lost}
+            onChange={(e) => setFormData({ ...formData, place_lost: e.target.value })}
+            required
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="date_lost">Date Lost *</Label>
+          <Input
+            id="date_lost"
+            type="date"
+            value={formData.date_lost}
+            onChange={(e) => setFormData({ ...formData, date_lost: e.target.value })}
+            required
+          />
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="description">Description *</Label>
+        <Textarea
+          id="description"
+          placeholder="Provide detailed description of the lost item..."
+          value={formData.description}
+          onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+          rows={4}
+          required
+        />
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="image">Image (Optional)</Label>
+        <div className="flex items-center gap-4">
+          <Input
+            id="image"
+            type="file"
+            accept="image/*"
+            onChange={handleImageUpload}
+            disabled={uploading}
+            className="flex-1"
+          />
+          {uploading && <Loader2 className="w-5 h-5 animate-spin text-blue-600" />}
+        </div>
+        {formData.image_url && (
+          <img src={formData.image_url} alt="Preview" className="mt-2 w-32 h-32 object-cover rounded-lg border" />
+        )}
+      </div>
+
+      <Button type="submit" className="w-full bg-gradient-to-r from-blue-600 to-teal-500" disabled={submitting || !formData.category}>
+        {submitting ? (
+          <>
+            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            Submitting...
+          </>
+        ) : (
+          'Report Lost Item'
+        )}
+      </Button>
+    </form>
+  );
+}
