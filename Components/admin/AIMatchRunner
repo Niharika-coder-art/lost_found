@@ -1,1 +1,279 @@
+import React, { useState } from 'react';
+import { base44 } from '@/api/base44Client';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Loader2, Sparkles, CheckCircle, AlertCircle } from 'lucide-react';
+import { toast } from 'sonner';
 
+export default function AIMatchRunner() {
+  const [isRunning, setIsRunning] = useState(false);
+  const [results, setResults] = useState(null);
+  const queryClient = useQueryClient();
+
+  const runAIMatchingMutation = useMutation({
+    mutationFn: async () => {
+      setResults(null);
+      
+      // Get all approved items
+      const lostItems = await base44.entities.LostItem.filter({ status: 'approved' });
+      const foundItems = await base44.entities.FoundItem.filter({ status: 'approved' });
+
+      if (lostItems.length === 0 || foundItems.length === 0) {
+        throw new Error('No approved items to match');
+      }
+
+      const matchesCreated = [];
+      
+      // For each lost item, try to find matches with found items
+      for (const lostItem of lostItems) {
+        // Skip if already matched
+        if (lostItem.status === 'matched') continue;
+
+        for (const foundItem of foundItems) {
+          // Skip if already matched
+          if (foundItem.status === 'matched') continue;
+
+          // Check if match already exists
+          const existingMatches = await base44.entities.Match.filter({
+            lost_item_id: lostItem.id,
+            found_item_id: foundItem.id
+          });
+
+          if (existingMatches.length > 0) continue;
+
+          // Use AI to compare items
+          const prompt = `Compare these two items and determine if they are likely the same item.
+
+Lost Item:
+- Name: ${lostItem.item_name}
+- Category: ${lostItem.category}
+- Description: ${lostItem.description}
+- Location Lost: ${lostItem.place_lost}
+- Date Lost: ${lostItem.date_lost}
+
+Found Item:
+- Name: ${foundItem.item_name}
+- Category: ${foundItem.category}
+- Description: ${foundItem.description}
+- Location Found: ${foundItem.place_found}
+- Date Found: ${foundItem.date_found}
+
+Consider:
+1. Are the categories the same?
+2. Do the descriptions match or describe similar items?
+3. Are the locations close to each other?
+4. Are the dates within a reasonable timeframe?
+
+Provide a similarity score (0-100) and a brief explanation of why they might match.`;
+
+          const aiResponse = await base44.integrations.Core.InvokeLLM({
+            prompt,
+            add_context_from_internet: false,
+            file_urls: [foundItem.image_url, lostItem.image_url].filter(Boolean),
+            response_json_schema: {
+              type: 'object',
+              properties: {
+                similarity_score: { type: 'number' },
+                is_match: { type: 'boolean' },
+                reason: { type: 'string' }
+              }
+            }
+          });
+
+          // If similarity is high enough (>70%), create a match
+          if (aiResponse.is_match && aiResponse.similarity_score >= 70) {
+            const users = await base44.entities.User.list();
+            const lostUser = users.find(u => u.email === lostItem.created_by);
+            const foundUser = users.find(u => u.email === foundItem.created_by);
+
+            if (!lostUser || !foundUser) continue;
+
+            // Create match
+            const match = await base44.entities.Match.create({
+              lost_item_id: lostItem.id,
+              found_item_id: foundItem.id,
+              lost_user_id: lostUser.id,
+              found_user_id: foundUser.id,
+              similarity_score: Math.round(aiResponse.similarity_score),
+              match_reason: aiResponse.reason,
+              status: 'pending'
+            });
+
+            // Update item statuses
+            await base44.entities.LostItem.update(lostItem.id, {
+              status: 'matched',
+              matched_with: foundItem.id
+            });
+
+            await base44.entities.FoundItem.update(foundItem.id, {
+              status: 'matched',
+              matched_with: lostItem.id
+            });
+
+            // Send notifications to both users
+            await base44.entities.Notification.create({
+              user_id: lostUser.id,
+              type: 'match_found',
+              title: 'Match Found!',
+              message: `Great news! We found a potential match for your lost item "${lostItem.item_name}". Check your matches to connect with the finder.`,
+              link: 'Matches'
+            });
+
+            await base44.entities.Notification.create({
+              user_id: foundUser.id,
+              type: 'match_found',
+              title: 'Match Found!',
+              message: `The item you found "${foundItem.item_name}" matches someone's lost item. Check your matches to connect with the owner.`,
+              link: 'Matches'
+            });
+
+            matchesCreated.push({
+              lostItem: lostItem.item_name,
+              foundItem: foundItem.item_name,
+              score: Math.round(aiResponse.similarity_score)
+            });
+          }
+        }
+      }
+
+      return { matchesCreated, totalLost: lostItems.length, totalFound: foundItems.length };
+    },
+    onSuccess: (data) => {
+      setResults(data);
+      queryClient.invalidateQueries();
+      toast.success(`AI matching complete! ${data.matchesCreated.length} matches found.`);
+    },
+    onError: (error) => {
+      toast.error(error.message || 'Failed to run AI matching');
+    },
+    onSettled: () => {
+      setIsRunning(false);
+    }
+  });
+
+  const handleRunMatching = () => {
+    setIsRunning(true);
+    runAIMatchingMutation.mutate();
+  };
+
+  return (
+    <div className="space-y-6">
+      <Card className="border-2 border-blue-200 bg-gradient-to-r from-blue-50 to-teal-50">
+        <CardContent className="p-6">
+          <div className="flex items-start gap-4">
+            <div className="w-12 h-12 rounded-full bg-blue-600 flex items-center justify-center flex-shrink-0">
+              <Sparkles className="w-6 h-6 text-white" />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-xl font-bold text-gray-900 mb-2">AI Matching System</h3>
+              <p className="text-gray-700 mb-4">
+                Run the AI matching algorithm to automatically compare all approved lost and found items. 
+                The system uses advanced AI to analyze descriptions, images, locations, and dates to find potential matches.
+              </p>
+              
+              <div className="bg-white rounded-lg p-4 mb-4 space-y-2 text-sm">
+                <h4 className="font-semibold text-gray-900">How it works:</h4>
+                <ul className="list-disc list-inside space-y-1 text-gray-700">
+                  <li>Compares all approved lost items with all approved found items</li>
+                  <li>Uses AI to analyze text descriptions and images</li>
+                  <li>Considers category, location proximity, and date ranges</li>
+                  <li>Creates matches with 70%+ similarity score</li>
+                  <li>Sends push notifications to both users when match is found</li>
+                  <li>Enables chat between matched users</li>
+                </ul>
+              </div>
+
+              <Button
+                onClick={handleRunMatching}
+                disabled={isRunning}
+                className="bg-blue-600 hover:bg-blue-700"
+                size="lg"
+              >
+                {isRunning ? (
+                  <>
+                    <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                    Running AI Matching...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-5 h-5 mr-2" />
+                    Run AI Matching
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {results && (
+        <Card className={`border-2 ${results.matchesCreated.length > 0 ? 'border-green-200 bg-green-50' : 'border-gray-200'}`}>
+          <CardContent className="p-6">
+            <div className="flex items-start gap-4">
+              <div className={`w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 ${
+                results.matchesCreated.length > 0 ? 'bg-green-600' : 'bg-gray-400'
+              }`}>
+                {results.matchesCreated.length > 0 ? (
+                  <CheckCircle className="w-6 h-6 text-white" />
+                ) : (
+                  <AlertCircle className="w-6 h-6 text-white" />
+                )}
+              </div>
+              
+              <div className="flex-1">
+                <h3 className="text-xl font-bold text-gray-900 mb-3">Matching Results</h3>
+                
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                  <div className="bg-white rounded-lg p-4">
+                    <p className="text-sm text-gray-600">Lost Items Scanned</p>
+                    <p className="text-2xl font-bold text-gray-900">{results.totalLost}</p>
+                  </div>
+                  <div className="bg-white rounded-lg p-4">
+                    <p className="text-sm text-gray-600">Found Items Scanned</p>
+                    <p className="text-2xl font-bold text-gray-900">{results.totalFound}</p>
+                  </div>
+                  <div className="bg-white rounded-lg p-4">
+                    <p className="text-sm text-gray-600">Matches Created</p>
+                    <p className="text-2xl font-bold text-green-600">{results.matchesCreated.length}</p>
+                  </div>
+                </div>
+
+                {results.matchesCreated.length > 0 && (
+                  <div className="bg-white rounded-lg p-4">
+                    <h4 className="font-semibold text-gray-900 mb-3">New Matches:</h4>
+                    <div className="space-y-2">
+                      {results.matchesCreated.map((match, idx) => (
+                        <div key={idx} className="flex items-center justify-between p-2 bg-green-50 rounded">
+                          <span className="text-sm text-gray-700">
+                            <strong>{match.lostItem}</strong> ↔ <strong>{match.foundItem}</strong>
+                          </span>
+                          <span className="text-sm font-semibold text-green-700">{match.score}% match</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {results.matchesCreated.length === 0 && (
+                  <div className="bg-white rounded-lg p-4 text-center text-gray-600">
+                    No new matches found. All existing items may already be matched or don't meet the similarity threshold.
+                  </div>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      <Card className="bg-yellow-50 border-yellow-200">
+        <CardContent className="p-4">
+          <p className="text-sm text-yellow-800">
+            <strong>Note:</strong> AI matching can take several minutes depending on the number of items. 
+            The system will process all combinations and notify users automatically when matches are found.
+          </p>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
