@@ -1,1 +1,52 @@
-
+{
+  "name": "Match",
+  "type": "object",
+  "properties": {
+    "lost_item_id": {
+      "type": "string",
+      "description": "ID of the lost item"
+    },
+    "found_item_id": {
+      "type": "string",
+      "description": "ID of the found item"
+    },
+    "lost_user_id": {
+      "type": "string",
+      "description": "ID of user who lost the item"
+    },
+    "found_user_id": {
+      "type": "string",
+      "description": "ID of user who found the item"
+    },
+    "similarity_score": {
+      "type": "number",
+      "description": "AI confidence score (0-100)"
+    },
+    "match_reason": {
+      "type": "string",
+      "description": "Explanation of why items were matched"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "accepted",
+        "rejected",
+        "completed"
+      ],
+      "default": "pending",
+      "description": "Status of the match"
+    },
+    "chat_enabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether chat is enabled for this match"
+    }
+  },
+  "required": [
+    "lost_item_id",
+    "found_item_id",
+    "lost_user_id",
+    "found_user_id"
+  ]
+}
