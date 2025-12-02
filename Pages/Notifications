@@ -1,1 +1,186 @@
+import React, { useState, useEffect } from 'react';
+import { base44 } from '@/api/base44Client';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Bell, CheckCircle, AlertTriangle, MessageCircle, XCircle, Sparkles, Package } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { format } from 'date-fns';
 
+export default function Notifications() {
+  const [user, setUser] = useState(null);
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    const loadUser = async () => {
+      try {
+        const isAuthenticated = await base44.auth.isAuthenticated();
+        if (!isAuthenticated) {
+          base44.auth.redirectToLogin('/Notifications');
+          return;
+        }
+        const currentUser = await base44.auth.me();
+        setUser(currentUser);
+      } catch (error) {
+        base44.auth.redirectToLogin('/Notifications');
+      }
+    };
+    loadUser();
+  }, []);
+
+  const { data: notifications = [] } = useQuery({
+    queryKey: ['notifications', user?.id],
+    queryFn: () => base44.entities.Notification.filter({ user_id: user.id }, '-created_date', 100),
+    enabled: !!user,
+    refetchInterval: 10000,
+    initialData: []
+  });
+
+  const markAsReadMutation = useMutation({
+    mutationFn: (notificationId) => base44.entities.Notification.update(notificationId, { is_read: true }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+    }
+  });
+
+  const markAllAsReadMutation = useMutation({
+    mutationFn: async () => {
+      const unreadNotifications = notifications.filter(n => !n.is_read);
+      await Promise.all(
+        unreadNotifications.map(n => base44.entities.Notification.update(n.id, { is_read: true }))
+      );
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+    }
+  });
+
+  const getNotificationIcon = (type) => {
+    const icons = {
+      match_found: Sparkles,
+      chat_message: MessageCircle,
+      admin_warning: AlertTriangle,
+      admin_suspension: XCircle,
+      admin_block: XCircle,
+      item_approved: CheckCircle,
+      item_rejected: XCircle,
+      item_update: Package
+    };
+    return icons[type] || Bell;
+  };
+
+  const getNotificationColor = (type) => {
+    const colors = {
+      match_found: 'bg-blue-100 text-blue-800 border-blue-200',
+      chat_message: 'bg-teal-100 text-teal-800 border-teal-200',
+      admin_warning: 'bg-yellow-100 text-yellow-800 border-yellow-200',
+      admin_suspension: 'bg-orange-100 text-orange-800 border-orange-200',
+      admin_block: 'bg-red-100 text-red-800 border-red-200',
+      item_approved: 'bg-green-100 text-green-800 border-green-200',
+      item_rejected: 'bg-red-100 text-red-800 border-red-200',
+      item_update: 'bg-gray-100 text-gray-800 border-gray-200'
+    };
+    return colors[type] || 'bg-gray-100 text-gray-800 border-gray-200';
+  };
+
+  if (!user) return null;
+
+  const unreadCount = notifications.filter(n => !n.is_read).length;
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-teal-50 p-4">
+      <div className="container mx-auto max-w-4xl py-8">
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">Notifications</h1>
+            <p className="text-gray-600">
+              {unreadCount > 0 ? `You have ${unreadCount} unread notification${unreadCount > 1 ? 's' : ''}` : 'You\'re all caught up!'}
+            </p>
+          </div>
+          {unreadCount > 0 && (
+            <Button
+              variant="outline"
+              onClick={() => markAllAsReadMutation.mutate()}
+              disabled={markAllAsReadMutation.isPending}
+            >
+              Mark All as Read
+            </Button>
+          )}
+        </div>
+
+        {notifications.length === 0 ? (
+          <Card>
+            <CardContent className="flex flex-col items-center justify-center py-16 text-gray-500">
+              <Bell className="w-20 h-20 mb-4 opacity-50" />
+              <p className="text-lg font-medium">No notifications yet</p>
+              <p className="text-sm">We'll notify you when something important happens</p>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="space-y-3">
+            {notifications.map(notification => {
+              const Icon = getNotificationIcon(notification.type);
+              const colorClass = getNotificationColor(notification.type);
+
+              return (
+                <Card
+                  key={notification.id}
+                  className={`hover:shadow-lg transition-shadow ${!notification.is_read ? 'border-l-4 border-l-blue-600' : ''}`}
+                >
+                  <CardContent className="p-4">
+                    <div className="flex gap-4">
+                      <div className={`w-12 h-12 rounded-full ${colorClass} border flex items-center justify-center flex-shrink-0`}>
+                        <Icon className="w-6 h-6" />
+                      </div>
+                      
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-start justify-between gap-2 mb-1">
+                          <h3 className={`font-semibold ${!notification.is_read ? 'text-gray-900' : 'text-gray-700'}`}>
+                            {notification.title}
+                          </h3>
+                          {!notification.is_read && (
+                            <Badge className="bg-blue-600 text-white text-xs">New</Badge>
+                          )}
+                        </div>
+                        
+                        <p className={`text-sm mb-2 ${!notification.is_read ? 'text-gray-700' : 'text-gray-600'}`}>
+                          {notification.message}
+                        </p>
+                        
+                        <div className="flex items-center gap-3">
+                          <span className="text-xs text-gray-500">
+                            {format(new Date(notification.created_date), 'MMM dd, yyyy • HH:mm')}
+                          </span>
+                          
+                          {notification.link && (
+                            <Link to={`/${notification.link}`}>
+                              <Button size="sm" variant="outline" className="h-7 text-xs">
+                                View
+                              </Button>
+                            </Link>
+                          )}
+                          
+                          {!notification.is_read && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 text-xs"
+                              onClick={() => markAsReadMutation.mutate(notification.id)}
+                            >
+                              Mark as Read
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
