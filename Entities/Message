@@ -1,1 +1,33 @@
-
+{
+  "name": "Message",
+  "type": "object",
+  "properties": {
+    "match_id": {
+      "type": "string",
+      "description": "ID of the match this message belongs to"
+    },
+    "sender_id": {
+      "type": "string",
+      "description": "ID of the user who sent the message"
+    },
+    "receiver_id": {
+      "type": "string",
+      "description": "ID of the user who receives the message"
+    },
+    "content": {
+      "type": "string",
+      "description": "Message content"
+    },
+    "is_read": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether message has been read"
+    }
+  },
+  "required": [
+    "match_id",
+    "sender_id",
+    "receiver_id",
+    "content"
+  ]
+}
