@@ -1,1 +1,181 @@
+import React, { useState, useEffect } from 'react';
+import { base44 } from '@/api/base44Client';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Shield, Package, Users, AlertTriangle, CheckCircle, XCircle } from 'lucide-react';
+import PendingItems from '@/components/admin/PendingItems';
+import UserManagement from '@/components/admin/UserManagement';
+import ViolationManagement from '@/components/admin/ViolationManagement';
+import AIMatchRunner from '@/components/admin/AIMatchRunner';
 
+export default function AdminDashboard() {
+  const [user, setUser] = useState(null);
+
+  useEffect(() => {
+    const checkAdmin = async () => {
+      try {
+        const isAuthenticated = await base44.auth.isAuthenticated();
+        
+        if (!isAuthenticated) {
+          base44.auth.redirectToLogin('/AdminDashboard');
+          return;
+        }
+
+        const currentUser = await base44.auth.me();
+        
+        if (!currentUser.is_admin && currentUser.role !== 'admin') {
+          alert('Unauthorized. Admin access only.');
+          window.location.href = '/Home';
+          return;
+        }
+        
+        setUser(currentUser);
+      } catch (error) {
+        base44.auth.redirectToLogin('/AdminDashboard');
+      }
+    };
+
+    checkAdmin();
+  }, []);
+
+  const { data: stats } = useQuery({
+    queryKey: ['adminStats'],
+    queryFn: async () => {
+      const [lostItems, foundItems, users, violations] = await Promise.all([
+        base44.entities.LostItem.list(),
+        base44.entities.FoundItem.list(),
+        base44.entities.User.list(),
+        base44.entities.Violation.list()
+      ]);
+
+      return {
+        pendingLost: lostItems.filter(i => i.status === 'pending_approval').length,
+        pendingFound: foundItems.filter(i => i.status === 'pending_approval').length,
+        totalUsers: users.length,
+        activeViolations: violations.filter(v => v.is_active).length
+      };
+    },
+    enabled: !!user
+  });
+
+  if (!user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-amber-600"></div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-teal-900 p-4">
+      <div className="container mx-auto max-w-7xl py-8">
+        {/* Header */}
+        <div className="flex items-center gap-4 mb-8">
+          <div className="w-16 h-16 rounded-full bg-gradient-to-r from-amber-500 to-orange-500 flex items-center justify-center">
+            <Shield className="w-8 h-8 text-white" />
+          </div>
+          <div>
+            <h1 className="text-3xl font-bold text-white">Admin Dashboard</h1>
+            <p className="text-gray-300">Manage items, users, and violations</p>
+          </div>
+        </div>
+
+        {/* Stats Cards */}
+        {stats && (
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+            <Card className="bg-white/10 backdrop-blur border-white/20">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-gray-300 text-sm">Pending Lost</p>
+                    <p className="text-3xl font-bold text-white mt-1">{stats.pendingLost}</p>
+                  </div>
+                  <AlertTriangle className="w-10 h-10 text-red-400" />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-white/10 backdrop-blur border-white/20">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-gray-300 text-sm">Pending Found</p>
+                    <p className="text-3xl font-bold text-white mt-1">{stats.pendingFound}</p>
+                  </div>
+                  <CheckCircle className="w-10 h-10 text-green-400" />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-white/10 backdrop-blur border-white/20">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-gray-300 text-sm">Total Users</p>
+                    <p className="text-3xl font-bold text-white mt-1">{stats.totalUsers}</p>
+                  </div>
+                  <Users className="w-10 h-10 text-blue-400" />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-white/10 backdrop-blur border-white/20">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-gray-300 text-sm">Active Violations</p>
+                    <p className="text-3xl font-bold text-white mt-1">{stats.activeViolations}</p>
+                  </div>
+                  <XCircle className="w-10 h-10 text-orange-400" />
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {/* Main Tabs */}
+        <Card className="bg-white/95 backdrop-blur shadow-2xl">
+          <CardContent className="p-6">
+            <Tabs defaultValue="items" className="space-y-6">
+              <TabsList className="grid w-full grid-cols-4">
+                <TabsTrigger value="items">
+                  <Package className="w-4 h-4 mr-2" />
+                  Items
+                </TabsTrigger>
+                <TabsTrigger value="users">
+                  <Users className="w-4 h-4 mr-2" />
+                  Users
+                </TabsTrigger>
+                <TabsTrigger value="violations">
+                  <AlertTriangle className="w-4 h-4 mr-2" />
+                  Violations
+                </TabsTrigger>
+                <TabsTrigger value="ai">
+                  <CheckCircle className="w-4 h-4 mr-2" />
+                  AI Matching
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="items">
+                <PendingItems />
+              </TabsContent>
+
+              <TabsContent value="users">
+                <UserManagement />
+              </TabsContent>
+
+              <TabsContent value="violations">
+                <ViolationManagement />
+              </TabsContent>
+
+              <TabsContent value="ai">
+                <AIMatchRunner />
+              </TabsContent>
+            </Tabs>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
