@@ -1,1 +1,73 @@
-
+{
+  "name": "LostItem",
+  "type": "object",
+  "properties": {
+    "item_name": {
+      "type": "string",
+      "description": "Name of the lost item"
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "Electronics",
+        "Documents",
+        "Accessories",
+        "Clothing",
+        "Books",
+        "Keys",
+        "Bags",
+        "Sports Equipment",
+        "Other"
+      ],
+      "description": "Category of the item"
+    },
+    "place_lost": {
+      "type": "string",
+      "description": "Location where item was lost"
+    },
+    "date_lost": {
+      "type": "string",
+      "format": "date",
+      "description": "Date when item was lost"
+    },
+    "description": {
+      "type": "string",
+      "description": "Detailed description of the item"
+    },
+    "image_url": {
+      "type": "string",
+      "description": "Image URL of the item"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pending_approval",
+        "approved",
+        "rejected",
+        "matched",
+        "retrieved"
+      ],
+      "default": "pending_approval",
+      "description": "Status of the lost item report"
+    },
+    "admin_notes": {
+      "type": "string",
+      "description": "Notes from admin about approval/rejection"
+    },
+    "embeddings": {
+      "type": "string",
+      "description": "AI embeddings for matching (stored as JSON string)"
+    },
+    "matched_with": {
+      "type": "string",
+      "description": "ID of the matched found item"
+    }
+  },
+  "required": [
+    "item_name",
+    "category",
+    "place_lost",
+    "date_lost",
+    "description"
+  ]
+}
