@@ -1,1 +1,135 @@
+import React, { useState, useEffect } from 'react';
+import { base44 } from '@/api/base44Client';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { GraduationCap, AlertTriangle, CheckCircle, Eye } from 'lucide-react';
+import ReportLostItem from '@/components/home/ReportLostItem';
+import ReportFoundItem from '@/components/home/ReportFoundItem';
+import ViewAllItems from '@/components/home/ViewAllItems';
 
+export default function Home() {
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const isAuthenticated = await base44.auth.isAuthenticated();
+        
+        if (!isAuthenticated) {
+          base44.auth.redirectToLogin('/Home');
+          return;
+        }
+
+        const currentUser = await base44.auth.me();
+        
+        if (currentUser.account_status === 'permanently_blocked') {
+          alert('Your account has been permanently blocked. Please contact admin with ID proof to unblock.');
+          base44.auth.logout();
+          return;
+        }
+
+        if (currentUser.account_status === 'suspended') {
+          alert('Your account is temporarily suspended. Please check your notifications for details.');
+        }
+
+        setUser(currentUser);
+      } catch (error) {
+        base44.auth.redirectToLogin('/Home');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    checkAuth();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-teal-50">
+      <div className="container mx-auto px-4 py-8 max-w-7xl">
+        {/* Header */}
+        <div className="text-center mb-12">
+          <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-gradient-to-r from-blue-600 to-teal-500 mb-4">
+            <GraduationCap className="w-10 h-10 text-white" />
+          </div>
+          <h1 className="text-4xl md:text-5xl font-bold text-gray-900 mb-3">
+            Campus Lost & Found
+          </h1>
+          <p className="text-lg text-gray-600">
+            Report lost items, find what you're looking for
+          </p>
+          {user && (
+            <p className="text-sm text-gray-500 mt-2">
+              Welcome back, {user.full_name}
+            </p>
+          )}
+        </div>
+
+        {/* Main Tabs */}
+        <Card className="shadow-2xl border-0">
+          <CardHeader className="border-b bg-gradient-to-r from-blue-50 to-teal-50">
+            <CardTitle>What would you like to do?</CardTitle>
+            <CardDescription>Choose an option below to get started</CardDescription>
+          </CardHeader>
+          <CardContent className="p-6">
+            <Tabs defaultValue="view" className="w-full">
+              <TabsList className="grid w-full grid-cols-3 mb-8">
+                <TabsTrigger value="view" className="flex items-center gap-2">
+                  <Eye className="w-4 h-4" />
+                  <span className="hidden sm:inline">View All Items</span>
+                  <span className="sm:hidden">View</span>
+                </TabsTrigger>
+                <TabsTrigger value="lost" className="flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4" />
+                  <span className="hidden sm:inline">Report Lost</span>
+                  <span className="sm:hidden">Lost</span>
+                </TabsTrigger>
+                <TabsTrigger value="found" className="flex items-center gap-2">
+                  <CheckCircle className="w-4 h-4" />
+                  <span className="hidden sm:inline">Report Found</span>
+                  <span className="sm:hidden">Found</span>
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="view" className="space-y-6">
+                <ViewAllItems />
+              </TabsContent>
+
+              <TabsContent value="lost" className="space-y-6">
+                <div className="max-w-3xl mx-auto">
+                  <div className="mb-6">
+                    <h2 className="text-2xl font-bold text-gray-900 mb-2">Report a Lost Item</h2>
+                    <p className="text-gray-600">
+                      Fill in the details below. Our AI system will automatically match your item with found items.
+                    </p>
+                  </div>
+                  <ReportLostItem />
+                </div>
+              </TabsContent>
+
+              <TabsContent value="found" className="space-y-6">
+                <div className="max-w-3xl mx-auto">
+                  <div className="mb-6">
+                    <h2 className="text-2xl font-bold text-gray-900 mb-2">Report a Found Item</h2>
+                    <p className="text-gray-600">
+                      Help someone find their lost item. Provide as much detail as possible.
+                    </p>
+                  </div>
+                  <ReportFoundItem />
+                </div>
+              </TabsContent>
+            </Tabs>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
