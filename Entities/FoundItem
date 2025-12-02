@@ -1,1 +1,82 @@
-
+{
+  "name": "FoundItem",
+  "type": "object",
+  "properties": {
+    "item_name": {
+      "type": "string",
+      "description": "Name of the found item"
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "Electronics",
+        "Documents",
+        "Accessories",
+        "Clothing",
+        "Books",
+        "Keys",
+        "Bags",
+        "Sports Equipment",
+        "Other"
+      ],
+      "description": "Category of the item"
+    },
+    "place_found": {
+      "type": "string",
+      "description": "Location where item was found"
+    },
+    "date_found": {
+      "type": "string",
+      "format": "date",
+      "description": "Date when item was found"
+    },
+    "description": {
+      "type": "string",
+      "description": "Detailed description of the item"
+    },
+    "image_url": {
+      "type": "string",
+      "description": "Image URL of the item"
+    },
+    "latitude": {
+      "type": "number",
+      "description": "GPS latitude of found location"
+    },
+    "longitude": {
+      "type": "number",
+      "description": "GPS longitude of found location"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pending_approval",
+        "approved",
+        "rejected",
+        "matched",
+        "claimed"
+      ],
+      "default": "pending_approval",
+      "description": "Status of the found item report"
+    },
+    "admin_notes": {
+      "type": "string",
+      "description": "Notes from admin about approval/rejection"
+    },
+    "embeddings": {
+      "type": "string",
+      "description": "AI embeddings for matching (stored as JSON string)"
+    },
+    "matched_with": {
+      "type": "string",
+      "description": "ID of the matched lost item"
+    }
+  },
+  "required": [
+    "item_name",
+    "category",
+    "place_found",
+    "date_found",
+    "description",
+    "image_url"
+  ]
+}
