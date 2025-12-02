@@ -1,1 +1,164 @@
+import React, { useState } from 'react';
+import { base44 } from '@/api/base44Client';
+import { useQuery } from '@tanstack/react-query';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Search, Calendar, MapPin, Package, Filter } from 'lucide-react';
+import { format } from 'date-fns';
 
+const CATEGORIES = ["All", "Electronics", "Documents", "Accessories", "Clothing", "Books", "Keys", "Bags", "Sports Equipment", "Other"];
+
+export default function ViewAllItems() {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('All');
+  const [typeFilter, setTypeFilter] = useState('all');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+
+  const { data: lostItems = [] } = useQuery({
+    queryKey: ['lostItems'],
+    queryFn: () => base44.entities.LostItem.filter({ status: 'approved' }, '-created_date', 100),
+    initialData: []
+  });
+
+  const { data: foundItems = [] } = useQuery({
+    queryKey: ['foundItems'],
+    queryFn: () => base44.entities.FoundItem.filter({ status: 'approved' }, '-created_date', 100),
+    initialData: []
+  });
+
+  const allItems = [
+    ...lostItems.map(item => ({ ...item, type: 'lost' })),
+    ...foundItems.map(item => ({ ...item, type: 'found' }))
+  ].sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
+
+  const filteredItems = allItems.filter(item => {
+    const matchesSearch = item.item_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         item.description.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesCategory = categoryFilter === 'All' || item.category === categoryFilter;
+    const matchesType = typeFilter === 'all' || item.type === typeFilter;
+    
+    let matchesDate = true;
+    if (dateFrom || dateTo) {
+      const itemDate = new Date(item.type === 'lost' ? item.date_lost : item.date_found);
+      if (dateFrom) matchesDate = matchesDate && itemDate >= new Date(dateFrom);
+      if (dateTo) matchesDate = matchesDate && itemDate <= new Date(dateTo);
+    }
+
+    return matchesSearch && matchesCategory && matchesType && matchesDate;
+  });
+
+  return (
+    <div className="space-y-6">
+      {/* Search and Filters */}
+      <div className="space-y-4">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+          <Input
+            placeholder="Search items by name or description..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-10"
+          />
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+          <Select value={typeFilter} onValueChange={setTypeFilter}>
+            <SelectTrigger>
+              <SelectValue placeholder="Type" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Items</SelectItem>
+              <SelectItem value="lost">Lost Only</SelectItem>
+              <SelectItem value="found">Found Only</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+            <SelectTrigger>
+              <SelectValue placeholder="Category" />
+            </SelectTrigger>
+            <SelectContent>
+              {CATEGORIES.map(cat => (
+                <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Input
+            type="date"
+            placeholder="From Date"
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+          />
+
+          <Input
+            type="date"
+            placeholder="To Date"
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
+          />
+        </div>
+      </div>
+
+      {/* Results Count */}
+      <div className="flex items-center gap-2 text-sm text-gray-600">
+        <Filter className="w-4 h-4" />
+        <span>Showing {filteredItems.length} items</span>
+      </div>
+
+      {/* Items Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {filteredItems.length === 0 ? (
+          <div className="col-span-full text-center py-12 text-gray-500">
+            <Package className="w-16 h-16 mx-auto mb-4 opacity-50" />
+            <p className="text-lg font-medium">No items found</p>
+            <p className="text-sm">Try adjusting your filters</p>
+          </div>
+        ) : (
+          filteredItems.map(item => (
+            <Card key={`${item.type}-${item.id}`} className="hover:shadow-lg transition-shadow">
+              <CardContent className="p-4">
+                {item.image_url && (
+                  <img
+                    src={item.image_url}
+                    alt={item.item_name}
+                    className="w-full h-48 object-cover rounded-lg mb-4"
+                  />
+                )}
+                
+                <div className="space-y-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <h3 className="font-semibold text-lg">{item.item_name}</h3>
+                    <Badge className={item.type === 'lost' ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}>
+                      {item.type === 'lost' ? 'Lost' : 'Found'}
+                    </Badge>
+                  </div>
+
+                  <p className="text-sm text-gray-600 line-clamp-2">{item.description}</p>
+
+                  <div className="space-y-2 text-sm text-gray-700">
+                    <div className="flex items-center gap-2">
+                      <Package className="w-4 h-4 text-gray-400" />
+                      <span>{item.category}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <MapPin className="w-4 h-4 text-gray-400" />
+                      <span>{item.type === 'lost' ? item.place_lost : item.place_found}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Calendar className="w-4 h-4 text-gray-400" />
+                      <span>{format(new Date(item.type === 'lost' ? item.date_lost : item.date_found), 'MMM dd, yyyy')}</span>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
