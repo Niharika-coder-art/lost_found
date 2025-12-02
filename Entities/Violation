@@ -1,1 +1,58 @@
-
+{
+  "name": "Violation",
+  "type": "object",
+  "properties": {
+    "user_id": {
+      "type": "string",
+      "description": "ID of user who committed the violation"
+    },
+    "violation_type": {
+      "type": "string",
+      "enum": [
+        "fake_report",
+        "spam",
+        "inappropriate_content",
+        "misuse",
+        "other"
+      ],
+      "description": "Type of violation"
+    },
+    "severity": {
+      "type": "string",
+      "enum": [
+        "warning",
+        "suspension",
+        "permanent_block"
+      ],
+      "description": "Severity level"
+    },
+    "description": {
+      "type": "string",
+      "description": "Details about the violation"
+    },
+    "related_item_id": {
+      "type": "string",
+      "description": "ID of related lost/found item"
+    },
+    "admin_id": {
+      "type": "string",
+      "description": "ID of admin who issued the violation"
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether violation is currently active"
+    },
+    "expires_at": {
+      "type": "string",
+      "format": "date",
+      "description": "When suspension expires (for temporary suspensions)"
+    }
+  },
+  "required": [
+    "user_id",
+    "violation_type",
+    "severity",
+    "description"
+  ]
+}
