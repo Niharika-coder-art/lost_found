@@ -1,0 +1,175 @@
+import React, { useState, useEffect } from 'react';
+import { base44 } from '@/api/base44Client';
+import { useQuery } from '@tanstack/react-query';
+import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Link } from 'react-router-dom';
+import { MessageCircle, MapPin, Package, CheckCircle, Sparkles } from 'lucide-react';
+import { format } from 'date-fns';
+
+export default function Matches() {
+  const [user, setUser] = useState(null);
+
+  useEffect(() => {
+    const loadUser = async () => {
+      try {
+        const isAuthenticated = await base44.auth.isAuthenticated();
+        if (!isAuthenticated) {
+          base44.auth.redirectToLogin('/Matches');
+          return;
+        }
+        const currentUser = await base44.auth.me();
+        setUser(currentUser);
+      } catch (error) {
+        base44.auth.redirectToLogin('/Matches');
+      }
+    };
+    loadUser();
+  }, []);
+
+  const { data: myMatches = [] } = useQuery({
+    queryKey: ['myMatches', user?.id],
+    queryFn: async () => {
+      const matches = await base44.entities.Match.list('-created_date', 100);
+      return matches.filter(m => m.lost_user_id === user.id || m.found_user_id === user.id);
+    },
+    enabled: !!user,
+    initialData: []
+  });
+
+  const { data: lostItems = [] } = useQuery({
+    queryKey: ['lostItemsForMatch'],
+    queryFn: () => base44.entities.LostItem.list('-created_date', 100),
+    initialData: []
+  });
+
+  const { data: foundItems = [] } = useQuery({
+    queryKey: ['foundItemsForMatch'],
+    queryFn: () => base44.entities.FoundItem.list('-created_date', 100),
+    initialData: []
+  });
+
+  const getItemDetails = (matchItem) => {
+    const lostItem = lostItems.find(i => i.id === matchItem.lost_item_id);
+    const foundItem = foundItems.find(i => i.id === matchItem.found_item_id);
+    return { lostItem, foundItem };
+  };
+
+  if (!user) return null;
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-teal-50 p-4">
+      <div className="container mx-auto max-w-5xl py-8">
+        <div className="mb-8">
+          <div className="flex items-center gap-3 mb-2">
+            <Sparkles className="w-8 h-8 text-blue-600" />
+            <h1 className="text-3xl font-bold text-gray-900">AI Matches</h1>
+          </div>
+          <p className="text-gray-600">Items matched by our AI system based on similarity</p>
+        </div>
+
+        {myMatches.length === 0 ? (
+          <Card>
+            <CardContent className="flex flex-col items-center justify-center py-16 text-gray-500">
+              <Package className="w-20 h-20 mb-4 opacity-50" />
+              <p className="text-lg font-medium">No matches yet</p>
+              <p className="text-sm">Check back later for AI-powered matches</p>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="space-y-6">
+            {myMatches.map(match => {
+              const { lostItem, foundItem } = getItemDetails(match);
+              if (!lostItem || !foundItem) return null;
+
+              const isLostUser = match.lost_user_id === user.id;
+
+              return (
+                <Card key={match.id} className="overflow-hidden border-2 border-blue-100 hover:shadow-xl transition-shadow">
+                  <div className="bg-gradient-to-r from-blue-50 to-teal-50 p-4 border-b">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Sparkles className="w-5 h-5 text-blue-600" />
+                        <span className="font-semibold text-blue-900">
+                          Match Confidence: {match.similarity_score}%
+                        </span>
+                      </div>
+                      <Badge className="bg-blue-100 text-blue-800">
+                        {isLostUser ? 'Your Lost Item' : 'Your Found Item'}
+                      </Badge>
+                    </div>
+                    {match.match_reason && (
+                      <p className="text-sm text-gray-700 mt-2">{match.match_reason}</p>
+                    )}
+                  </div>
+
+                  <CardContent className="p-6">
+                    <div className="grid md:grid-cols-2 gap-6">
+                      {/* Lost Item */}
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2 text-sm font-medium text-red-700 mb-2">
+                          <Package className="w-4 h-4" />
+                          Lost Item
+                        </div>
+                        {lostItem.image_url && (
+                          <img src={lostItem.image_url} alt={lostItem.item_name} className="w-full h-40 object-cover rounded-lg" />
+                        )}
+                        <h3 className="font-semibold text-lg">{lostItem.item_name}</h3>
+                        <p className="text-sm text-gray-600">{lostItem.description}</p>
+                        <div className="text-sm text-gray-700 space-y-1">
+                          <div className="flex items-center gap-2">
+                            <MapPin className="w-4 h-4 text-gray-400" />
+                            {lostItem.place_lost}
+                          </div>
+                          <div>{format(new Date(lostItem.date_lost), 'MMM dd, yyyy')}</div>
+                        </div>
+                      </div>
+
+                      {/* Found Item */}
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2 text-sm font-medium text-green-700 mb-2">
+                          <CheckCircle className="w-4 h-4" />
+                          Found Item
+                        </div>
+                        {foundItem.image_url && (
+                          <img src={foundItem.image_url} alt={foundItem.item_name} className="w-full h-40 object-cover rounded-lg" />
+                        )}
+                        <h3 className="font-semibold text-lg">{foundItem.item_name}</h3>
+                        <p className="text-sm text-gray-600">{foundItem.description}</p>
+                        <div className="text-sm text-gray-700 space-y-1">
+                          <div className="flex items-center gap-2">
+                            <MapPin className="w-4 h-4 text-gray-400" />
+                            {foundItem.place_found}
+                          </div>
+                          <div>{format(new Date(foundItem.date_found), 'MMM dd, yyyy')}</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row gap-3 mt-6 pt-6 border-t">
+                      <Link to={`/Chat?matchId=${match.id}`} className="flex-1">
+                        <Button className="w-full bg-blue-600 hover:bg-blue-700">
+                          <MessageCircle className="w-4 h-4 mr-2" />
+                          Chat with {isLostUser ? 'Finder' : 'Owner'}
+                        </Button>
+                      </Link>
+                      {foundItem.latitude && foundItem.longitude && isLostUser && (
+                        <Link to={`/Map?lat=${foundItem.latitude}&lng=${foundItem.longitude}`} className="flex-1">
+                          <Button variant="outline" className="w-full">
+                            <MapPin className="w-4 h-4 mr-2" />
+                            View Location
+                          </Button>
+                        </Link>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
