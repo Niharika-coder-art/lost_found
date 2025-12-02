@@ -1,1 +1,51 @@
-
+{
+  "name": "Notification",
+  "type": "object",
+  "properties": {
+    "user_id": {
+      "type": "string",
+      "description": "ID of user receiving the notification"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "match_found",
+        "chat_message",
+        "admin_warning",
+        "admin_suspension",
+        "admin_block",
+        "item_approved",
+        "item_rejected",
+        "item_update"
+      ],
+      "description": "Type of notification"
+    },
+    "title": {
+      "type": "string",
+      "description": "Notification title"
+    },
+    "message": {
+      "type": "string",
+      "description": "Notification message"
+    },
+    "link": {
+      "type": "string",
+      "description": "Link to relevant page"
+    },
+    "is_read": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether notification has been read"
+    },
+    "metadata": {
+      "type": "string",
+      "description": "Additional data as JSON string"
+    }
+  },
+  "required": [
+    "user_id",
+    "type",
+    "title",
+    "message"
+  ]
+}
